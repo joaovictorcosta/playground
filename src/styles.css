@@ -123,6 +123,9 @@ select {
   display: block;
   width: 100%;
   height: 100%;
+  /* Mantém cantos das células legíveis ao escalar CSS vs. backing store em DPR alto. */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .snake-overlay {

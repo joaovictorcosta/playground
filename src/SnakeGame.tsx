@@ -4,16 +4,16 @@ import {
   useRef,
   useState,
 } from 'react';
+import { GRID_COLUMNS, GRID_ROWS } from './snake/config';
+import { createInitialSnake } from './snake/initialSnake';
+import { paintGame } from './snake/render';
+import type { GridPoint } from './snake/types';
 
-type Point = { x: number; y: number };
-
-const GRID_COLS = 20;
-const GRID_ROWS = 20;
 const BASE_TICK_MS = 165;
 const MIN_TICK_MS = 75;
 const SPEED_STEP_POINTS = 4;
 
-function keyToDir(key: string): Point | null {
+function keyToDir(key: string): GridPoint | null {
   switch (key) {
     case 'ArrowUp':
     case 'w':
@@ -36,11 +36,11 @@ function keyToDir(key: string): Point | null {
   }
 }
 
-function sameCell(a: Point, b: Point): boolean {
+function sameCell(a: GridPoint, b: GridPoint): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
-function cellKey(p: Point): string {
+function cellKey(p: GridPoint): string {
   return `${p.x},${p.y}`;
 }
 
@@ -48,36 +48,38 @@ function randInt(max: number): number {
   return Math.floor(Math.random() * max);
 }
 
-function spawnFood(occupied: Set<string>): Point {
-  let p: Point;
+function spawnFood(occupied: Set<string>): GridPoint {
+  let p: GridPoint;
   do {
-    p = { x: randInt(GRID_COLS), y: randInt(GRID_ROWS) };
+    p = { x: randInt(GRID_COLUMNS), y: randInt(GRID_ROWS) };
   } while (occupied.has(cellKey(p)));
   return p;
-}
-
-function initialSnake(): Point[] {
-  const y = Math.floor(GRID_ROWS / 2);
-  const x = Math.floor(GRID_COLS / 2);
-  return [
-    { x, y },
-    { x: x + 1, y },
-    { x: x + 2, y },
-  ];
 }
 
 function tickMsForScore(s: number): number {
   return Math.max(MIN_TICK_MS, BASE_TICK_MS - Math.floor(s / SPEED_STEP_POINTS) * 8);
 }
 
+/** Detecta embate consigo próprio; permite ocupar células da cauda que se libertam este tick quando não há crescimento. */
+function collisionWithSelf(snake: readonly GridPoint[], next: GridPoint, eats: boolean): boolean {
+  return snake.some((seg, idx) => {
+    if (!sameCell(seg, next)) return false;
+    const isTailClearing =
+      !eats &&
+      snake.length >= 2 &&
+      idx === snake.length - 1;
+    return !isTailClearing;
+  });
+}
+
 export function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const scoreRef = useRef(0);
-  const snakeRef = useRef<Point[]>(initialSnake());
-  const dirRef = useRef<Point>({ x: 1, y: 0 });
-  const nextDirRef = useRef<Point | null>(null);
-  const foodRef = useRef<Point>({ x: 10, y: 10 });
+  const snakeRef = useRef<GridPoint[]>([...createInitialSnake()]);
+  const dirRef = useRef<GridPoint>({ x: 1, y: 0 });
+  const nextDirRef = useRef<GridPoint | null>(null);
+  const foodRef = useRef<GridPoint>({ x: 10, y: 10 });
   const aliveRef = useRef(true);
   const pausedRef = useRef(false);
 
@@ -85,7 +87,7 @@ export function SnakeGame() {
   const [overlay, setOverlay] = useState<'none' | 'paused' | 'gameover'>('none');
 
   const resetGame = useCallback(() => {
-    snakeRef.current = initialSnake();
+    snakeRef.current = [...createInitialSnake()];
     dirRef.current = { x: 1, y: 0 };
     nextDirRef.current = null;
     aliveRef.current = true;
@@ -114,58 +116,11 @@ export function SnakeGame() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const cellW = cw / GRID_COLS;
-    const cellH = ch / GRID_ROWS;
-
-    ctx.fillStyle = '#0a1628';
-    ctx.fillRect(0, 0, cw, ch);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1;
-    for (let gx = 0; gx <= GRID_COLS; gx++) {
-      const px = gx * cellW + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, ch);
-      ctx.stroke();
-    }
-    for (let gy = 0; gy <= GRID_ROWS; gy++) {
-      const py = gy * cellH + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(0, py);
-      ctx.lineTo(cw, py);
-      ctx.stroke();
-    }
-
-    const pad = Math.max(cellW, cellH) * 0.12;
-    const food = foodRef.current;
-    ctx.fillStyle = '#ff8266';
-    ctx.beginPath();
-    ctx.arc(
-      food.x * cellW + cellW / 2,
-      food.y * cellH + cellH / 2,
-      Math.min(cellW, cellH) / 2 - pad,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-
-    const snake = snakeRef.current;
-    snake.forEach((seg, i) => {
-      const deep = i / Math.max(snake.length - 1, 1);
-      const g = Math.round(115 + deep * 80);
-      ctx.fillStyle =
-        i === snake.length - 1
-          ? '#8fb1ff'
-          : `rgb(${g}, ${176 + Math.round(deep * 40)}, ${255})`;
-      ctx.fillRect(
-        seg.x * cellW + pad,
-        seg.y * cellH + pad,
-        cellW - pad * 2,
-        cellH - pad * 2,
-      );
+    paintGame(ctx, canvas.width, canvas.height, {
+      columns: GRID_COLUMNS,
+      rows: GRID_ROWS,
+      snake: snakeRef.current,
+      food: foodRef.current,
     });
   }, []);
 
@@ -260,12 +215,13 @@ export function SnakeGame() {
         }
         dirRef.current = dir;
 
-        const head = snakeRef.current[snakeRef.current.length - 1];
-        const next: Point = { x: head.x + dir.x, y: head.y + dir.y };
+        const snake = snakeRef.current;
+        const head = snake[0];
+        const next: GridPoint = { x: head.x + dir.x, y: head.y + dir.y };
 
         if (
           next.x < 0 ||
-          next.x >= GRID_COLS ||
+          next.x >= GRID_COLUMNS ||
           next.y < 0 ||
           next.y >= GRID_ROWS
         ) {
@@ -274,23 +230,21 @@ export function SnakeGame() {
           break;
         }
 
-        const hitSelf = snakeRef.current.some((s) => sameCell(s, next));
-        if (hitSelf) {
+        const eats = sameCell(next, foodRef.current);
+        if (collisionWithSelf(snake, next, eats)) {
           aliveRef.current = false;
           setOverlay('gameover');
           break;
         }
 
-        const eats = sameCell(next, foodRef.current);
-        const nextSnake = snakeRef.current.slice();
-        nextSnake.push(next);
-        if (!eats) nextSnake.shift();
-        snakeRef.current = nextSnake;
-
+        const prev = snake.slice();
         if (eats) {
+          snakeRef.current = [next, ...prev];
           scoreRef.current += 1;
           setScoreState(scoreRef.current);
-          foodRef.current = spawnFood(new Set(nextSnake.map(cellKey)));
+          foodRef.current = spawnFood(new Set(snakeRef.current.map(cellKey)));
+        } else {
+          snakeRef.current = [next, ...prev.slice(0, -1)];
         }
       }
 
