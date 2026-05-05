@@ -4,14 +4,24 @@ import {
   useRef,
   useState,
 } from 'react';
-import { GRID_COLUMNS, GRID_ROWS } from './snake/config';
+import {
+  GAME_TICK_INTERVAL_MS,
+  GRID_COLUMNS,
+  GRID_ROWS,
+} from './snake/config';
 import { createInitialSnake } from './snake/initialSnake';
 import { paintGame } from './snake/render';
 import type { GridPoint } from './snake/types';
 
-const BASE_TICK_MS = 165;
-const MIN_TICK_MS = 75;
-const SPEED_STEP_POINTS = 4;
+/** Telemetria do loop (refs): sem re-render por tick; útil para tuning no DevTools. */
+export type SnakeGameLoopTelemetry = {
+  /** Ticks lógicos desde o último reset (cada tick = um passo na grelha). */
+  tick: number;
+  /** Intervalo configurado entre ticks (ms), espelho de GAME_TICK_INTERVAL_MS. */
+  tickIntervalMs: number;
+  /** Delta do último frame rAF (ms). */
+  lastFrameDeltaMs: number;
+};
 
 function keyToDir(key: string): GridPoint | null {
   switch (key) {
@@ -56,10 +66,6 @@ function spawnFood(occupied: Set<string>): GridPoint {
   return p;
 }
 
-function tickMsForScore(s: number): number {
-  return Math.max(MIN_TICK_MS, BASE_TICK_MS - Math.floor(s / SPEED_STEP_POINTS) * 8);
-}
-
 /** Detecta embate consigo próprio; permite ocupar células da cauda que se libertam este tick quando não há crescimento. */
 function collisionWithSelf(snake: readonly GridPoint[], next: GridPoint, eats: boolean): boolean {
   return snake.some((seg, idx) => {
@@ -82,6 +88,11 @@ export function SnakeGame() {
   const foodRef = useRef<GridPoint>({ x: 10, y: 10 });
   const aliveRef = useRef(true);
   const pausedRef = useRef(false);
+  const loopTelemetryRef = useRef<SnakeGameLoopTelemetry>({
+    tick: 0,
+    tickIntervalMs: GAME_TICK_INTERVAL_MS,
+    lastFrameDeltaMs: 0,
+  });
 
   const [score, setScoreState] = useState(0);
   const [overlay, setOverlay] = useState<'none' | 'paused' | 'gameover'>('none');
@@ -93,6 +104,8 @@ export function SnakeGame() {
     aliveRef.current = true;
     pausedRef.current = false;
     scoreRef.current = 0;
+    loopTelemetryRef.current.tick = 0;
+    loopTelemetryRef.current.tickIntervalMs = GAME_TICK_INTERVAL_MS;
     const occ = new Set(snakeRef.current.map(cellKey));
     foodRef.current = spawnFood(occ);
     setScoreState(0);
@@ -174,6 +187,21 @@ export function SnakeGame() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [resetGame]);
 
+  /** Em DEV, inspecionar no console: `window.__SNAKE_GAME_LOOP__`. */
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (
+        window as Window & { __SNAKE_GAME_LOOP__?: typeof loopTelemetryRef }
+      ).__SNAKE_GAME_LOOP__ = loopTelemetryRef;
+    }
+    return () => {
+      if (import.meta.env.DEV) {
+        delete (window as Window & { __SNAKE_GAME_LOOP__?: unknown })
+          .__SNAKE_GAME_LOOP__;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const occ = new Set(snakeRef.current.map(cellKey));
     foodRef.current = spawnFood(occ);
@@ -184,10 +212,16 @@ export function SnakeGame() {
     let acc = 0;
     let last = performance.now();
     let rafId = 0;
+    const tickMs = GAME_TICK_INTERVAL_MS;
+    loopTelemetryRef.current.tickIntervalMs = tickMs;
 
     const loop = (now: number) => {
       rafId = requestAnimationFrame(loop);
+      const telem = loopTelemetryRef.current;
+      telem.lastFrameDeltaMs = now - last;
+
       if (!aliveRef.current) {
+        last = now;
         drawFrame();
         return;
       }
@@ -197,13 +231,12 @@ export function SnakeGame() {
         return;
       }
 
-      const tickMs = tickMsForScore(scoreRef.current);
-
       acc += now - last;
       last = now;
 
       while (acc >= tickMs) {
         acc -= tickMs;
+        telem.tick += 1;
         let dir = dirRef.current;
         const queued = nextDirRef.current;
         if (queued) {
@@ -265,8 +298,8 @@ export function SnakeGame() {
             <dd>{score}</dd>
           </div>
           <div>
-            <dt>Intervalo</dt>
-            <dd>{tickMsForScore(score)} ms</dd>
+            <dt>Intervalo (tick)</dt>
+            <dd>{GAME_TICK_INTERVAL_MS} ms</dd>
           </div>
         </dl>
       </header>
