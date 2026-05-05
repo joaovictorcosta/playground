@@ -9,9 +9,15 @@ import {
   GRID_COLUMNS,
   GRID_ROWS,
 } from './snake/config';
+import {
+  loadPersistedBestBaseline,
+  tryPersistBestScore,
+} from './snake/bestScoreStorage';
 import { createInitialSnake } from './snake/initialSnake';
 import { paintGame } from './snake/render';
 import type { GridPoint } from './snake/types';
+
+const INITIAL_PERSIST = loadPersistedBestBaseline();
 
 /** Telemetria do loop (refs): sem re-render por tick; útil para tuning no DevTools. */
 export type SnakeGameLoopTelemetry = {
@@ -134,6 +140,9 @@ export function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const scoreRef = useRef(0);
+  /** Valor já persistido/conhecido ao arranque; atualizado apenas após `setItem` bem-sucedido. */
+  const persistedBestFloorRef = useRef(INITIAL_PERSIST.value);
+  const readStorageTrustedRef = useRef(INITIAL_PERSIST.readTrusted);
   const snakeRef = useRef<GridPoint[]>([...createInitialSnake()]);
   const dirRef = useRef<GridPoint>({ x: 1, y: 0 });
   /** FIFO de direções pedidas; consumida um item por tick no loop. */
@@ -148,7 +157,10 @@ export function SnakeGame() {
   });
 
   const [score, setScoreState] = useState(0);
+  /** Réplica fiável do recorde persistido (para o HUD re-renderizar após gravação). */
+  const [persistBaseline, setPersistBaseline] = useState(INITIAL_PERSIST.value);
   const [overlay, setOverlay] = useState<'none' | 'paused' | 'gameover'>('none');
+  const hudBestScore = Math.max(persistBaseline, score);
 
   const resetGame = useCallback(() => {
     snakeRef.current = [...createInitialSnake()];
@@ -349,7 +361,19 @@ export function SnakeGame() {
         if (eats) {
           snakeRef.current = [next, ...prev];
           scoreRef.current += 1;
-          setScoreState(scoreRef.current);
+          const newScore = scoreRef.current;
+          setScoreState(newScore);
+
+          const floor = persistedBestFloorRef.current;
+          if (
+            readStorageTrustedRef.current &&
+            newScore > floor &&
+            tryPersistBestScore(newScore)
+          ) {
+            persistedBestFloorRef.current = newScore;
+            setPersistBaseline(newScore);
+          }
+
           const occAfterEat = new Set(snakeRef.current.map(cellKey));
           foodRef.current = spawnFood(occAfterEat);
         } else {
@@ -372,6 +396,10 @@ export function SnakeGame() {
           <div>
             <dt>Pontuação</dt>
             <dd>{score}</dd>
+          </div>
+          <div>
+            <dt>Melhor</dt>
+            <dd>{hudBestScore}</dd>
           </div>
           <div>
             <dt>Intervalo (tick)</dt>
