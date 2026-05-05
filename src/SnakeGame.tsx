@@ -103,24 +103,31 @@ function randInt(max: number): number {
   return Math.floor(Math.random() * max);
 }
 
+/** Comida numa célula livre (não em `occupied`: cobra e, se aplicável, a própria comida a substituir). */
 function spawnFood(occupied: Set<string>): GridPoint {
-  let p: GridPoint;
-  do {
-    p = { x: randInt(GRID_COLUMNS), y: randInt(GRID_ROWS) };
-  } while (occupied.has(cellKey(p)));
-  return p;
+  const free: GridPoint[] = [];
+  for (let y = 0; y < GRID_ROWS; y += 1) {
+    for (let x = 0; x < GRID_COLUMNS; x += 1) {
+      const c: GridPoint = { x, y };
+      if (!occupied.has(cellKey(c))) free.push(c);
+    }
+  }
+  if (free.length === 0) {
+    throw new Error('Sem células livres para colocar comida');
+  }
+  return free[randInt(free.length)]!;
 }
 
-/** Detecta embate consigo próprio; permite ocupar células da cauda que se libertam este tick quando não há crescimento. */
-function collisionWithSelf(snake: readonly GridPoint[], next: GridPoint, eats: boolean): boolean {
-  return snake.some((seg, idx) => {
-    if (!sameCell(seg, next)) return false;
-    const isTailClearing =
-      !eats &&
-      snake.length >= 2 &&
-      idx === snake.length - 1;
-    return !isTailClearing;
-  });
+/** Garante que a comida não fique sobre a cobra (p.ex. estado inconsistente); mantém posição se já for válida. */
+function ensureFoodInEmptyCell(snake: readonly GridPoint[], food: GridPoint): GridPoint {
+  const occ = new Set(snake.map(cellKey));
+  if (!occ.has(cellKey(food))) return food;
+  return spawnFood(occ);
+}
+
+/** Qualquer sobreposição da nova cabeça com o corpo é game over (sem exceção da cauda). */
+function collisionWithSelf(snake: readonly GridPoint[], next: GridPoint): boolean {
+  return snake.some((seg) => sameCell(seg, next));
 }
 
 export function SnakeGame() {
@@ -315,6 +322,8 @@ export function SnakeGame() {
         dirRef.current = dir;
 
         const snake = snakeRef.current;
+        foodRef.current = ensureFoodInEmptyCell(snake, foodRef.current);
+
         const head = snake[0];
         const next: GridPoint = { x: head.x + dir.x, y: head.y + dir.y };
 
@@ -330,7 +339,7 @@ export function SnakeGame() {
         }
 
         const eats = sameCell(next, foodRef.current);
-        if (collisionWithSelf(snake, next, eats)) {
+        if (collisionWithSelf(snake, next)) {
           aliveRef.current = false;
           setOverlay('gameover');
           break;
@@ -341,7 +350,8 @@ export function SnakeGame() {
           snakeRef.current = [next, ...prev];
           scoreRef.current += 1;
           setScoreState(scoreRef.current);
-          foodRef.current = spawnFood(new Set(snakeRef.current.map(cellKey)));
+          const occAfterEat = new Set(snakeRef.current.map(cellKey));
+          foodRef.current = spawnFood(occAfterEat);
         } else {
           snakeRef.current = [next, ...prev.slice(0, -1)];
         }
