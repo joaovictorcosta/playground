@@ -159,8 +159,10 @@ export function SnakeGame() {
   const [score, setScoreState] = useState(0);
   /** Réplica fiável do recorde persistido (para o HUD re-renderizar após gravação). */
   const [persistBaseline, setPersistBaseline] = useState(INITIAL_PERSIST.value);
+  /** Pico entre todas as partidas nesta página (memória quando não há persistência fiável). */
+  const [sessionPeak, setSessionPeak] = useState(0);
   const [overlay, setOverlay] = useState<'none' | 'paused' | 'gameover'>('none');
-  const hudBestScore = Math.max(persistBaseline, score);
+  const hudBestScore = Math.max(persistBaseline, sessionPeak);
 
   const resetGame = useCallback(() => {
     snakeRef.current = [...createInitialSnake()];
@@ -176,6 +178,13 @@ export function SnakeGame() {
     setScoreState(0);
     setOverlay('none');
   }, []);
+
+  const restartMatch = useCallback(() => {
+    resetGame();
+    queueMicrotask(() =>
+      canvasRef.current?.focus({ preventScroll: true }),
+    );
+  }, [resetGame]);
 
   const resizeCanvas = useCallback(() => {
     const wrap = wrapRef.current;
@@ -238,7 +247,7 @@ export function SnakeGame() {
       const restartKeys = ['Enter', 'NumpadEnter'];
       if (!aliveRef.current && restartKeys.includes(e.code)) {
         e.preventDefault();
-        resetGame();
+        restartMatch();
         return;
       }
 
@@ -273,7 +282,7 @@ export function SnakeGame() {
 
     canvas.addEventListener('keydown', onKeyDown);
     return () => canvas.removeEventListener('keydown', onKeyDown);
-  }, [resetGame]);
+  }, [restartMatch]);
 
   /** Em DEV, inspecionar no console: `window.__SNAKE_GAME_LOOP__`. */
   useEffect(() => {
@@ -290,20 +299,22 @@ export function SnakeGame() {
     };
   }, []);
 
+  /** Mesmo estado que após reinício: cobra, direção, pontuação, comida e overlay limpos. */
   useEffect(() => {
-    const occ = new Set(snakeRef.current.map(cellKey));
-    foodRef.current = spawnFood(occ);
-    drawFrame();
-  }, [drawFrame]);
+    resetGame();
+  }, [resetGame]);
 
+  /** Um único `requestAnimationFrame` enquanto o componente existe; cleanup cancela o frame pendente. */
   useEffect(() => {
     let acc = 0;
     let last = performance.now();
     let rafId = 0;
+    let stopped = false;
     const tickMs = GAME_TICK_INTERVAL_MS;
     loopTelemetryRef.current.tickIntervalMs = tickMs;
 
     const loop = (now: number) => {
+      if (stopped) return;
       rafId = requestAnimationFrame(loop);
       const telem = loopTelemetryRef.current;
       telem.lastFrameDeltaMs = now - last;
@@ -363,6 +374,7 @@ export function SnakeGame() {
           scoreRef.current += 1;
           const newScore = scoreRef.current;
           setScoreState(newScore);
+          setSessionPeak((prev) => Math.max(prev, newScore));
 
           const floor = persistedBestFloorRef.current;
           if (
@@ -385,7 +397,10 @@ export function SnakeGame() {
     };
 
     rafId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(rafId);
+    };
   }, [drawFrame]);
 
   return (
@@ -394,16 +409,12 @@ export function SnakeGame() {
         <h1 className="snake-title">Snake</h1>
         <dl className="snake-stats">
           <div>
-            <dt>Pontuação</dt>
+            <dt>Partida</dt>
             <dd>{score}</dd>
           </div>
           <div>
             <dt>Melhor</dt>
             <dd>{hudBestScore}</dd>
-          </div>
-          <div>
-            <dt>Intervalo (tick)</dt>
-            <dd>{GAME_TICK_INTERVAL_MS} ms</dd>
           </div>
         </dl>
       </header>
@@ -427,14 +438,35 @@ export function SnakeGame() {
               {overlay === 'gameover' && (
                 <>
                   <p className="snake-overlay-title">Game over</p>
-                  <p className="snake-overlay-hint">Enter para recomeçar.</p>
+                  <dl className="snake-overlay-scores">
+                    <div>
+                      <dt>Pontuação</dt>
+                      <dd>{score}</dd>
+                    </div>
+                    <div>
+                      <dt>Melhor</dt>
+                      <dd>{hudBestScore}</dd>
+                    </div>
+                  </dl>
+                  <div className="snake-overlay-actions">
+                    <button
+                      type="button"
+                      className="snake-restart-btn"
+                      onClick={restartMatch}
+                    >
+                      Recomeçar
+                    </button>
+                  </div>
+                  <p className="snake-overlay-hint">
+                    Enter ou o botão · mesmo resultado
+                  </p>
                 </>
               )}
             </div>
           )}
         </div>
         <p className="snake-help">
-          Setas ou WASD quando esta área estiver focada (clique no jogo se o teclado não responder) · Espaço pausa · Enter recomeça após game over
+          Setas ou WASD com foco na grelha (clique no jogo se não responder) · Espaço pausa · Após game over: Enter ou Recomeçar
         </p>
       </div>
     </div>
