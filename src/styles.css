@@ -126,6 +126,15 @@ select {
   /* Mantém cantos das células legíveis ao escalar CSS vs. backing store em DPR alto. */
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  cursor: default;
+}
+
+.snake-canvas:focus {
+  outline: none;
+}
+
+.snake-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.85);
 }
 
 .snake-overlay {

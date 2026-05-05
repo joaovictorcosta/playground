@@ -23,21 +23,30 @@ export type SnakeGameLoopTelemetry = {
   lastFrameDeltaMs: number;
 };
 
-function keyToDir(key: string): GridPoint | null {
-  switch (key) {
+/** Usa `code` para setas (independente do layout); WASD por `key`. */
+function eventToDir(e: KeyboardEvent): GridPoint | null {
+  switch (e.code) {
     case 'ArrowUp':
+      return { x: 0, y: -1 };
+    case 'ArrowDown':
+      return { x: 0, y: 1 };
+    case 'ArrowLeft':
+      return { x: -1, y: 0 };
+    case 'ArrowRight':
+      return { x: 1, y: 0 };
+    default:
+      break;
+  }
+  switch (e.key) {
     case 'w':
     case 'W':
       return { x: 0, y: -1 };
-    case 'ArrowDown':
     case 's':
     case 'S':
       return { x: 0, y: 1 };
-    case 'ArrowLeft':
     case 'a':
     case 'A':
       return { x: -1, y: 0 };
-    case 'ArrowRight':
     case 'd':
     case 'D':
       return { x: 1, y: 0 };
@@ -45,6 +54,42 @@ function keyToDir(key: string): GridPoint | null {
       return null;
   }
 }
+
+function isMovementCode(code: string): boolean {
+  return (
+    code === 'ArrowUp' ||
+    code === 'ArrowDown' ||
+    code === 'ArrowLeft' ||
+    code === 'ArrowRight' ||
+    code === 'KeyW' ||
+    code === 'KeyA' ||
+    code === 'KeyS' ||
+    code === 'KeyD'
+  );
+}
+
+function isOppositeDir(cur: GridPoint, want: GridPoint): boolean {
+  return (
+    (cur.x !== 0 && want.x === -cur.x) ||
+    (cur.y !== 0 && want.y === -cur.y)
+  );
+}
+
+/**
+ * Direções pendentes até ao próximo tick: fila FIFO limitada.
+ *
+ * Regra anti-180° ao **enfileirar**: compara-se `want` com a última direção da
+ * cadeia já planeada — último item da fila, ou `dirRef` se a fila estiver vazia.
+ * Assim não é possível pedir um invertido num único instante antes do tick; em
+ * ticks seguintes, cada movimento válido altera essa referência.
+ *
+ * Em cada **tick**, só se consome uma entrada; compara-se de novo com `dirRef`
+ * (direção já aplicada naquele momento) por segurança.
+ *
+ * Tamanho máximo: descarta-se a entrada mais antiga se a fila enche (limite
+ * baixo evita fila “antiga” após pausa longa).
+ */
+const MAX_PENDING_DIRECTIONS = 4;
 
 function sameCell(a: GridPoint, b: GridPoint): boolean {
   return a.x === b.x && a.y === b.y;
@@ -84,7 +129,8 @@ export function SnakeGame() {
   const scoreRef = useRef(0);
   const snakeRef = useRef<GridPoint[]>([...createInitialSnake()]);
   const dirRef = useRef<GridPoint>({ x: 1, y: 0 });
-  const nextDirRef = useRef<GridPoint | null>(null);
+  /** FIFO de direções pedidas; consumida um item por tick no loop. */
+  const pendingDirsRef = useRef<GridPoint[]>([]);
   const foodRef = useRef<GridPoint>({ x: 10, y: 10 });
   const aliveRef = useRef(true);
   const pausedRef = useRef(false);
@@ -100,7 +146,7 @@ export function SnakeGame() {
   const resetGame = useCallback(() => {
     snakeRef.current = [...createInitialSnake()];
     dirRef.current = { x: 1, y: 0 };
-    nextDirRef.current = null;
+    pendingDirsRef.current = [];
     aliveRef.current = true;
     pausedRef.current = false;
     scoreRef.current = 0;
@@ -151,10 +197,19 @@ export function SnakeGame() {
     };
   }, [resizeCanvas]);
 
+  /** Foco inicial no canvas: teclado não usa `window`, só este alvo. */
   useEffect(() => {
+    canvasRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         e.preventDefault();
+        if (e.repeat) return;
         if (!aliveRef.current) return;
         pausedRef.current = !pausedRef.current;
         setOverlay(pausedRef.current ? 'paused' : 'none');
@@ -168,23 +223,37 @@ export function SnakeGame() {
         return;
       }
 
-      const want = keyToDir(e.key);
+      const want = eventToDir(e);
       if (!want) return;
 
-      const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-      if (navKeys.includes(e.key)) e.preventDefault();
+      const isNav = isMovementCode(e.code);
+      /*
+       * Key repeat do SO: ignorar para movimento evita rajadas na fila / ticks
+       * estranhos; uma direção já pedida permanece até ao próximo tick.
+       */
+      if (isNav && e.repeat) return;
+
+      if (
+        e.code === 'ArrowUp' ||
+        e.code === 'ArrowDown' ||
+        e.code === 'ArrowLeft' ||
+        e.code === 'ArrowRight'
+      ) {
+        e.preventDefault();
+      }
 
       if (!aliveRef.current || pausedRef.current) return;
 
-      const cur = dirRef.current;
-      const isOpposite =
-        (cur.x !== 0 && want.x === -cur.x) ||
-        (cur.y !== 0 && want.y === -cur.y);
-      if (!isOpposite) nextDirRef.current = want;
+      const q = pendingDirsRef.current;
+      const refTail = q.length > 0 ? q[q.length - 1]! : dirRef.current;
+      if (sameCell(want, refTail)) return;
+      if (isOppositeDir(refTail, want)) return;
+      if (q.length >= MAX_PENDING_DIRECTIONS) q.shift();
+      q.push(want);
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    canvas.addEventListener('keydown', onKeyDown);
+    return () => canvas.removeEventListener('keydown', onKeyDown);
   }, [resetGame]);
 
   /** Em DEV, inspecionar no console: `window.__SNAKE_GAME_LOOP__`. */
@@ -238,13 +307,10 @@ export function SnakeGame() {
         acc -= tickMs;
         telem.tick += 1;
         let dir = dirRef.current;
-        const queued = nextDirRef.current;
-        if (queued) {
-          const isOpposite =
-            (dir.x !== 0 && queued.x === -dir.x) ||
-            (dir.y !== 0 && queued.y === -dir.y);
-          if (!isOpposite) dir = queued;
-          nextDirRef.current = null;
+        const q = pendingDirsRef.current;
+        if (q.length > 0) {
+          const queued = q.shift()!;
+          if (!isOppositeDir(dir, queued)) dir = queued;
         }
         dirRef.current = dir;
 
@@ -305,7 +371,13 @@ export function SnakeGame() {
       </header>
       <div className="snake-stage">
         <div className="snake-canvas-wrap" ref={wrapRef}>
-          <canvas ref={canvasRef} className="snake-canvas" aria-label="Área do jogo Snake" />
+          <canvas
+            ref={canvasRef}
+            className="snake-canvas"
+            aria-label="Área do jogo Snake"
+            tabIndex={0}
+            role="application"
+          />
           {overlay !== 'none' && (
             <div className="snake-overlay" role="dialog" aria-modal="true">
               {overlay === 'paused' && (
@@ -324,7 +396,7 @@ export function SnakeGame() {
           )}
         </div>
         <p className="snake-help">
-          Setas ou WASD para mover · Espaço pausa · Enter recomeça após game over
+          Setas ou WASD quando esta área estiver focada (clique no jogo se o teclado não responder) · Espaço pausa · Enter recomeça após game over
         </p>
       </div>
     </div>
