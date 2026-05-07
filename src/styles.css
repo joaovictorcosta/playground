@@ -43,6 +43,168 @@ select {
   padding: clamp(16px, 3vw, 28px);
 }
 
+.app-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2.5vw, 18px);
+  width: min(520px, 100%);
+}
+
+.app-nav {
+  align-self: stretch;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.app-nav-back {
+  appearance: none;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(244, 247, 251, 0.95);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-nav-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app-nav-back:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.9);
+  outline-offset: 2px;
+}
+
+.game-menu {
+  width: 100%;
+  padding: clamp(24px, 5vw, 32px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background: rgba(8, 13, 25, 0.72);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.game-menu-title {
+  margin: 0 0 8px;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.game-menu-lead {
+  margin: 0 0 22px;
+  font-size: 0.95rem;
+  color: rgba(244, 247, 251, 0.65);
+}
+
+.game-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-menu-btn {
+  appearance: none;
+  margin: 0;
+  padding: 14px 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #f4f7fb;
+}
+
+.game-menu-btn--snake {
+  background: linear-gradient(135deg, rgba(72, 126, 255, 0.35), rgba(18, 205, 170, 0.22));
+}
+
+.game-menu-btn--snake:hover {
+  background: linear-gradient(135deg, rgba(72, 126, 255, 0.45), rgba(18, 205, 170, 0.3));
+}
+
+.game-menu-btn--carrinho {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.game-menu-btn--carrinho:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.game-menu-btn:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.9);
+  outline-offset: 2px;
+}
+
+.carrinho-app {
+  width: min(520px, 100%);
+  padding: clamp(20px, 4vw, 28px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background: rgba(8, 13, 25, 0.72);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 3vw, 22px);
+}
+
+.carrinho-hud {
+  margin: 0;
+  padding: 0 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.carrinho-title {
+  margin: 0;
+  font-size: clamp(1.4rem, 4.2vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.carrinho-subtitle {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: rgba(180, 198, 230, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.carrinho-placeholder {
+  min-height: min(280px, 50vh);
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(6, 16, 24, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+
+.carrinho-placeholder-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.carrinho-placeholder-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(244, 247, 251, 0.58);
+  max-width: 32ch;
+}
+
 .snake-app {
   width: min(520px, 100%);
   padding: clamp(20px, 4vw, 28px);
