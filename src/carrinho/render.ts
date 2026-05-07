@@ -14,7 +14,7 @@ export type PaintCarrinhoOpts = {
   /** Período do padrão horizontal que rola (px canvas). */
   readonly roadPatternStripeCanvas: number;
   readonly obstacles: readonly ObstacleSlot[];
-  readonly crashed: boolean;
+  readonly gameOver: boolean;
 };
 
 /**
@@ -33,7 +33,7 @@ export function paintCarrinho(
     roadScrollOffset,
     roadPatternStripeCanvas,
     obstacles,
-    crashed,
+    gameOver,
   } = opts;
 
   ctx.save();
@@ -115,7 +115,7 @@ export function paintCarrinho(
     Math.floor(car.h * 0.38),
   );
 
-  if (crashed) {
+  if (gameOver) {
     ctx.fillStyle = 'rgba(120, 20, 20, 0.35)';
     ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
   }

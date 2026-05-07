@@ -14,6 +14,7 @@ import { computeRoadLayout } from './carrinho/layout';
 import { paintCarrinho } from './carrinho/render';
 import type { CarrinhoGameState, ObstacleSlot } from './carrinho/types';
 
+/** Desktop: só ←/→ mudam de faixa (incremento/decremento com clamp nas bordas). */
 function steerDelta(e: KeyboardEvent): -1 | 0 | 1 {
   switch (e.code) {
     case 'ArrowLeft':
@@ -21,34 +22,19 @@ function steerDelta(e: KeyboardEvent): -1 | 0 | 1 {
     case 'ArrowRight':
       return 1;
     default:
-      break;
-  }
-  switch (e.key) {
-    case 'a':
-    case 'A':
-      return -1;
-    case 'd':
-    case 'D':
-      return 1;
-    default:
       return 0;
   }
 }
 
 function isSteerKey(e: KeyboardEvent): boolean {
-  return (
-    e.code === 'ArrowLeft' ||
-    e.code === 'ArrowRight' ||
-    e.code === 'KeyA' ||
-    e.code === 'KeyD'
-  );
+  return e.code === 'ArrowLeft' || e.code === 'ArrowRight';
 }
 
 export function CarrinhoGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const carrinhoStateRef = useRef<CarrinhoGameState>(createInitialCarrinhoState());
-  const crashedRef = useRef(false);
+  const gameOverRef = useRef(false);
   const simRef = useRef({
     roadScroll: 0,
     obstacles: [] as ObstacleSlot[],
@@ -57,7 +43,7 @@ export function CarrinhoGame() {
 
   const [hud, setHud] = useState(() => ({
     lane: carrinhoStateRef.current.laneIndex,
-    crashed: false,
+    gameOver: false,
   }));
 
   const resizeCanvas = useCallback(() => {
@@ -87,11 +73,11 @@ export function CarrinhoGame() {
   }, []);
 
   const fullRestart = useCallback(() => {
-    crashedRef.current = false;
+    gameOverRef.current = false;
     carrinhoStateRef.current = createInitialCarrinhoState();
     setHud({
       lane: carrinhoStateRef.current.laneIndex,
-      crashed: false,
+      gameOver: false,
     });
     resetSimulationOnly();
   }, [resetSimulationOnly]);
@@ -110,17 +96,17 @@ export function CarrinhoGame() {
       roadScrollOffset: simRef.current.roadScroll,
       roadPatternStripeCanvas: stripeCanvas,
       obstacles: simRef.current.obstacles,
-      crashed: crashedRef.current,
+      gameOver: gameOverRef.current,
     });
   }, []);
 
   const resizeAndPaint = useCallback(() => {
     resizeCanvas();
     carrinhoStateRef.current = createInitialCarrinhoState();
-    crashedRef.current = false;
+    gameOverRef.current = false;
     setHud({
       lane: carrinhoStateRef.current.laneIndex,
-      crashed: false,
+      gameOver: false,
     });
     resetSimulationOnly();
     paintOneFrame();
@@ -156,7 +142,7 @@ export function CarrinhoGame() {
           canvas.height;
         const dy = beltSpeedCanvasPerSec * dt;
 
-        if (!crashedRef.current) {
+        if (!gameOverRef.current) {
           simRef.current.roadScroll += dy;
           advanceEsteiraObstacles(
             simRef.current.obstacles,
@@ -173,8 +159,8 @@ export function CarrinhoGame() {
               simRef.current.obstacles,
             )
           ) {
-            crashedRef.current = true;
-            setHud((h) => ({ ...h, crashed: true }));
+            gameOverRef.current = true;
+            setHud((h) => ({ ...h, gameOver: true }));
           }
         }
 
@@ -192,17 +178,17 @@ export function CarrinhoGame() {
     if (!canvas) return;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && crashedRef.current) {
+      if (e.code === 'Space' && gameOverRef.current) {
         e.preventDefault();
         fullRestart();
         return;
       }
-      if (e.code === 'KeyR' && crashedRef.current) {
+      if (e.code === 'KeyR' && gameOverRef.current) {
         e.preventDefault();
         fullRestart();
         return;
       }
-      if (crashedRef.current) return;
+      if (gameOverRef.current) return;
 
       const d = steerDelta(e);
       if (d === 0) return;
@@ -241,7 +227,7 @@ export function CarrinhoGame() {
           </div>
           <div>
             <dt>Estado</dt>
-            <dd>{hud.crashed ? 'Choque — Espaço ou R' : 'A andar'}</dd>
+            <dd>{hud.gameOver ? 'Game over — Espaço ou R' : 'A andar'}</dd>
           </div>
         </dl>
       </header>
@@ -256,8 +242,8 @@ export function CarrinhoGame() {
           />
         </div>
         <p className="carrinho-help">
-          Setas ou A/D para mudar de faixa · A esteira e os obstáculos descem · Espaço ou R
-          recomeça após choque
+          Apenas ← e → para mudar de faixa · Esteira e obstáculos descem · Espaço ou R para
+          recomeçar após game over
         </p>
       </div>
     </div>
