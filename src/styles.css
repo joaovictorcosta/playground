@@ -159,7 +159,11 @@ select {
   margin: 0;
   padding: 0 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .carrinho-title {
@@ -169,40 +173,75 @@ select {
   letter-spacing: 0.02em;
 }
 
-.carrinho-subtitle {
-  margin: 6px 0 0;
-  font-size: 0.88rem;
-  color: rgba(180, 198, 230, 0.9);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+.carrinho-stats {
+  margin: 0;
+  display: flex;
+  gap: clamp(16px, 4vw, 24px);
+  font-size: 0.875rem;
+  color: rgba(244, 247, 251, 0.82);
 }
 
-.carrinho-placeholder {
-  min-height: min(280px, 50vh);
-  border-radius: 16px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  background: rgba(6, 16, 24, 0.55);
+.carrinho-stats dt {
+  margin: 0 0 3px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(180, 198, 230, 0.9);
+}
+
+.carrinho-stats dd {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #f4f7fb;
+  line-height: 1.2;
+}
+
+.carrinho-stats > div > dt {
+  display: block;
+}
+
+.carrinho-stage {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  text-align: center;
+  gap: 12px;
+  min-height: 0;
 }
 
-.carrinho-placeholder-icon {
-  font-size: 2.5rem;
-  line-height: 1;
-  opacity: 0.85;
+.carrinho-canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #061018;
 }
 
-.carrinho-placeholder-text {
+.carrinho-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: default;
+}
+
+.carrinho-canvas:focus {
+  outline: none;
+}
+
+.carrinho-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.85);
+}
+
+.carrinho-help {
   margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.45;
-  color: rgba(244, 247, 251, 0.58);
-  max-width: 32ch;
+  font-size: 0.82rem;
+  color: rgba(244, 247, 251, 0.55);
+  line-height: 1.35;
 }
 
 .snake-app {
