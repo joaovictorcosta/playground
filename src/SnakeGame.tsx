@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -16,8 +17,6 @@ import {
 import { createInitialSnake } from './snake/initialSnake';
 import { paintGame } from './snake/render';
 import type { GridPoint } from './snake/types';
-
-const INITIAL_PERSIST = loadPersistedBestBaseline();
 
 /** Telemetria do loop (refs): sem re-render por tick; útil para tuning no DevTools. */
 export type SnakeGameLoopTelemetry = {
@@ -137,12 +136,13 @@ function collisionWithSelf(snake: readonly GridPoint[], next: GridPoint): boolea
 }
 
 export function SnakeGame() {
+  const mountPersist = useMemo(() => loadPersistedBestBaseline(), []);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const scoreRef = useRef(0);
   /** Valor já persistido/conhecido ao arranque; atualizado apenas após `setItem` bem-sucedido. */
-  const persistedBestFloorRef = useRef(INITIAL_PERSIST.value);
-  const readStorageTrustedRef = useRef(INITIAL_PERSIST.readTrusted);
+  const persistedBestFloorRef = useRef(mountPersist.value);
+  const readStorageTrustedRef = useRef(mountPersist.readTrusted);
   const snakeRef = useRef<GridPoint[]>([...createInitialSnake()]);
   const dirRef = useRef<GridPoint>({ x: 1, y: 0 });
   /** FIFO de direções pedidas; consumida um item por tick no loop. */
@@ -158,7 +158,7 @@ export function SnakeGame() {
 
   const [score, setScoreState] = useState(0);
   /** Réplica fiável do recorde persistido (para o HUD re-renderizar após gravação). */
-  const [persistBaseline, setPersistBaseline] = useState(INITIAL_PERSIST.value);
+  const [persistBaseline, setPersistBaseline] = useState(mountPersist.value);
   /** Pico entre todas as partidas nesta página (memória quando não há persistência fiável). */
   const [sessionPeak, setSessionPeak] = useState(0);
   const [overlay, setOverlay] = useState<'none' | 'paused' | 'gameover'>('none');
@@ -465,9 +465,13 @@ export function SnakeGame() {
             </div>
           )}
         </div>
-        <p className="snake-help">
-          Setas ou WASD com foco na grelha (clique no jogo se não responder) · Espaço pausa · Após game over: Enter ou Recomeçar
-        </p>
+        {overlay === 'none' && (
+          <p className="game-play-hint" id="snake-play-hint">
+            <span className="game-play-hint-keys">↑ ↓ ← →</span>
+            ou WASD para guiar · Espaço pausa
+            <span className="game-play-hint-foco"> · clique na pista se não responder</span>
+          </p>
+        )}
       </div>
     </div>
   );

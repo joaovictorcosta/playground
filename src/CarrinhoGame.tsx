@@ -161,9 +161,11 @@ export function CarrinhoGame() {
   }, [resizeAndPaint]);
 
   useEffect(() => {
+    let stopped = false;
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
+      if (stopped) return;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
@@ -202,10 +204,15 @@ export function CarrinhoGame() {
         paintOneFrame();
       }
 
-      raf = requestAnimationFrame(loop);
+      if (!stopped) {
+        raf = requestAnimationFrame(loop);
+      }
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
   }, [paintOneFrame, syncHudFromSim]);
 
   useEffect(() => {
@@ -225,6 +232,8 @@ export function CarrinhoGame() {
 
       const d = steerDelta(e);
       if (d === 0) return;
+
+      if (isSteerKey(e) && e.repeat) return;
 
       if (isSteerKey(e) && e.target === canvas) {
         e.preventDefault();
@@ -301,10 +310,13 @@ export function CarrinhoGame() {
             </div>
           )}
         </div>
-        <p className="carrinho-help">
-          Apenas ← e → para mudar de faixa · Esteira e obstáculos descem · Após game over:
-          Enter, Espaço, R ou Recomeçar
-        </p>
+        {!hud.gameOver && (
+          <p className="game-play-hint" id="carrinho-play-hint">
+            <span className="game-play-hint-keys">← →</span>
+            trocar de faixa
+            <span className="game-play-hint-foco"> · clique na pista se não responder</span>
+          </p>
+        )}
       </div>
     </div>
   );

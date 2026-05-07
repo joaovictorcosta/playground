@@ -157,8 +157,9 @@ select {
 
 .carrinho-hud {
   margin: 0;
-  padding: 0 0 16px;
+  padding: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 16px;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -169,6 +170,7 @@ select {
 .carrinho-title {
   margin: 0;
   font-size: clamp(1.4rem, 4.2vw, 1.85rem);
+  line-height: 1.15;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -237,11 +239,24 @@ select {
   box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.85);
 }
 
-.carrinho-help {
+.game-play-hint {
   margin: 0;
-  font-size: 0.82rem;
-  color: rgba(244, 247, 251, 0.55);
-  line-height: 1.35;
+  font-size: 0.8125rem;
+  color: rgba(244, 247, 251, 0.62);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.game-play-hint-keys {
+  margin-right: 0.35em;
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(180, 198, 230, 0.95);
+}
+
+.game-play-hint-foco {
+  color: rgba(244, 247, 251, 0.48);
 }
 
 .snake-app {
@@ -420,9 +435,3 @@ select {
   outline-offset: 2px;
 }
 
-.snake-help {
-  margin: 0;
-  font-size: 0.82rem;
-  color: rgba(244, 247, 251, 0.55);
-  line-height: 1.35;
-}
