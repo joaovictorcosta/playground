@@ -11,6 +11,13 @@ export const LANE_COUNT = 3 as const;
  */
 export const ESTEIRA_SPEED_CSS_PX_PER_SEC = 220 as const;
 
+/**
+ * Placar por **distância virtual da esteira** (`roadScroll` do canvas × razão px CSS /
+ * px canvas durante a partida): acumula só em movimento vivo; placar =
+ * floor(distância_css / este valor). Taxa ~ `ESTEIRA_SPEED_CSS_PX_PER_SEC / este N` pts/s.
+ */
+export const CARRINHO_SCORE_CSS_PX_PER_POINT = 2 as const;
+
 /** Altura (CSS px) de cada “degrau” do padrão da faixa que rola com a esteira. */
 export const ROAD_PATTERN_STRIPE_CSS = 28 as const;
 

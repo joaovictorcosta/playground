@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  CARRINHO_SCORE_CSS_PX_PER_POINT,
   ESTEIRA_SPEED_CSS_PX_PER_SEC,
   LANE_COUNT,
   ROAD_PATTERN_STRIPE_CSS,
@@ -35,6 +36,9 @@ export function CarrinhoGame() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const carrinhoStateRef = useRef<CarrinhoGameState>(createInitialCarrinhoState());
   const gameOverRef = useRef(false);
+  /** Últimos valores enviados ao HUD (evita setState a cada frame). */
+  const lastHudGameOverRef = useRef(false);
+  const lastHudScoreRef = useRef(0);
   const simRef = useRef({
     roadScroll: 0,
     obstacles: [] as ObstacleSlot[],
@@ -44,6 +48,7 @@ export function CarrinhoGame() {
   const [hud, setHud] = useState(() => ({
     lane: carrinhoStateRef.current.laneIndex,
     gameOver: false,
+    score: 0,
   }));
 
   const resizeCanvas = useCallback(() => {
@@ -72,15 +77,27 @@ export function CarrinhoGame() {
     simRef.current.ready = true;
   }, []);
 
-  const fullRestart = useCallback(() => {
-    gameOverRef.current = false;
-    carrinhoStateRef.current = createInitialCarrinhoState();
-    setHud({
-      lane: carrinhoStateRef.current.laneIndex,
-      gameOver: false,
-    });
-    resetSimulationOnly();
-  }, [resetSimulationOnly]);
+  const syncHudFromSim = useCallback(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    // Placar a partir da distância acumulada (roadScroll em px canvas → px CSS), não do módulo do desenho.
+    const distanceCssPx =
+      simRef.current.roadScroll *
+      (wrap.clientHeight / Math.max(1, canvas.height));
+    const score = Math.floor(
+      distanceCssPx / CARRINHO_SCORE_CSS_PX_PER_POINT,
+    );
+    const gameOver = gameOverRef.current;
+    if (
+      score !== lastHudScoreRef.current ||
+      gameOver !== lastHudGameOverRef.current
+    ) {
+      lastHudScoreRef.current = score;
+      lastHudGameOverRef.current = gameOver;
+      setHud((h) => ({ ...h, score, gameOver }));
+    }
+  }, []);
 
   const paintOneFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -100,13 +117,30 @@ export function CarrinhoGame() {
     });
   }, []);
 
+  const fullRestart = useCallback(() => {
+    gameOverRef.current = false;
+    lastHudGameOverRef.current = false;
+    lastHudScoreRef.current = 0;
+    carrinhoStateRef.current = createInitialCarrinhoState();
+    setHud({
+      lane: carrinhoStateRef.current.laneIndex,
+      gameOver: false,
+      score: 0,
+    });
+    resetSimulationOnly();
+    paintOneFrame();
+  }, [resetSimulationOnly, paintOneFrame]);
+
   const resizeAndPaint = useCallback(() => {
     resizeCanvas();
     carrinhoStateRef.current = createInitialCarrinhoState();
     gameOverRef.current = false;
+    lastHudGameOverRef.current = false;
+    lastHudScoreRef.current = 0;
     setHud({
       lane: carrinhoStateRef.current.laneIndex,
       gameOver: false,
+      score: 0,
     });
     resetSimulationOnly();
     paintOneFrame();
@@ -160,9 +194,10 @@ export function CarrinhoGame() {
             )
           ) {
             gameOverRef.current = true;
-            setHud((h) => ({ ...h, gameOver: true }));
           }
         }
+
+        syncHudFromSim();
 
         paintOneFrame();
       }
@@ -171,24 +206,22 @@ export function CarrinhoGame() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [paintOneFrame]);
+  }, [paintOneFrame, syncHudFromSim]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const restartKeys = new Set(['Enter', 'NumpadEnter']);
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && gameOverRef.current) {
-        e.preventDefault();
-        fullRestart();
+      if (gameOverRef.current) {
+        if (e.code === 'Space' || e.code === 'KeyR' || restartKeys.has(e.code)) {
+          e.preventDefault();
+          fullRestart();
+        }
         return;
       }
-      if (e.code === 'KeyR' && gameOverRef.current) {
-        e.preventDefault();
-        fullRestart();
-        return;
-      }
-      if (gameOverRef.current) return;
 
       const d = steerDelta(e);
       if (d === 0) return;
@@ -226,8 +259,12 @@ export function CarrinhoGame() {
             </dd>
           </div>
           <div>
+            <dt>Pontuação</dt>
+            <dd>{hud.score}</dd>
+          </div>
+          <div>
             <dt>Estado</dt>
-            <dd>{hud.gameOver ? 'Game over — Espaço ou R' : 'A andar'}</dd>
+            <dd>{hud.gameOver ? 'Game over' : 'A andar'}</dd>
           </div>
         </dl>
       </header>
@@ -240,10 +277,33 @@ export function CarrinhoGame() {
             tabIndex={0}
             role="application"
           />
+          {hud.gameOver && (
+            <div className="snake-overlay" role="dialog" aria-modal="true">
+              <p className="snake-overlay-title">Game over</p>
+              <dl className="snake-overlay-scores">
+                <div>
+                  <dt>Pontuação</dt>
+                  <dd>{hud.score}</dd>
+                </div>
+              </dl>
+              <div className="snake-overlay-actions">
+                <button
+                  type="button"
+                  className="snake-restart-btn"
+                  onClick={fullRestart}
+                >
+                  Recomeçar
+                </button>
+              </div>
+              <p className="snake-overlay-hint">
+                Enter, Espaço ou R · mesmo resultado que o botão
+              </p>
+            </div>
+          )}
         </div>
         <p className="carrinho-help">
-          Apenas ← e → para mudar de faixa · Esteira e obstáculos descem · Espaço ou R para
-          recomeçar após game over
+          Apenas ← e → para mudar de faixa · Esteira e obstáculos descem · Após game over:
+          Enter, Espaço, R ou Recomeçar
         </p>
       </div>
     </div>
