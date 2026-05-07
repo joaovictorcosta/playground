@@ -1,14 +1,64 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { LANE_COUNT } from './carrinho/config';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ESTEIRA_SPEED_CSS_PX_PER_SEC,
+  LANE_COUNT,
+  ROAD_PATTERN_STRIPE_CSS,
+} from './carrinho/config';
+import {
+  advanceEsteiraObstacles,
+  createPooledObstacles,
+  playerHitsObstacle,
+} from './carrinho/esteiraSim';
 import { createInitialCarrinhoState } from './carrinho/initialState';
+import { computeRoadLayout } from './carrinho/layout';
 import { paintCarrinho } from './carrinho/render';
-import type { CarrinhoGameState } from './carrinho/types';
+import type { CarrinhoGameState, ObstacleSlot } from './carrinho/types';
+
+function steerDelta(e: KeyboardEvent): -1 | 0 | 1 {
+  switch (e.code) {
+    case 'ArrowLeft':
+      return -1;
+    case 'ArrowRight':
+      return 1;
+    default:
+      break;
+  }
+  switch (e.key) {
+    case 'a':
+    case 'A':
+      return -1;
+    case 'd':
+    case 'D':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function isSteerKey(e: KeyboardEvent): boolean {
+  return (
+    e.code === 'ArrowLeft' ||
+    e.code === 'ArrowRight' ||
+    e.code === 'KeyA' ||
+    e.code === 'KeyD'
+  );
+}
 
 export function CarrinhoGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  /** Estado lógico; `laneIndex` será alterado por input num passo seguinte. */
   const carrinhoStateRef = useRef<CarrinhoGameState>(createInitialCarrinhoState());
+  const crashedRef = useRef(false);
+  const simRef = useRef({
+    roadScroll: 0,
+    obstacles: [] as ObstacleSlot[],
+    ready: false,
+  });
+
+  const [hud, setHud] = useState(() => ({
+    lane: carrinhoStateRef.current.laneIndex,
+    crashed: false,
+  }));
 
   const resizeCanvas = useCallback(() => {
     const wrap = wrapRef.current;
@@ -21,22 +71,60 @@ export function CarrinhoGame() {
     canvas.height = Math.max(1, Math.floor(cssH * dpr));
   }, []);
 
-  const drawFrame = useCallback(() => {
+  const resetSimulationOnly = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const layout = computeRoadLayout(canvas.width, canvas.height, LANE_COUNT);
+    simRef.current.obstacles = createPooledObstacles(
+      layout,
+      LANE_COUNT,
+      wrap.clientHeight,
+      Math.random,
+    );
+    simRef.current.roadScroll = 0;
+    simRef.current.ready = true;
+  }, []);
+
+  const fullRestart = useCallback(() => {
+    crashedRef.current = false;
+    carrinhoStateRef.current = createInitialCarrinhoState();
+    setHud({
+      lane: carrinhoStateRef.current.laneIndex,
+      crashed: false,
+    });
+    resetSimulationOnly();
+  }, [resetSimulationOnly]);
+
+  const paintOneFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
+    const stripeCanvas =
+      (ROAD_PATTERN_STRIPE_CSS / Math.max(1, wrap.clientHeight)) * canvas.height;
     paintCarrinho(ctx, canvas.width, canvas.height, {
       laneCount: LANE_COUNT,
       laneIndex: carrinhoStateRef.current.laneIndex,
+      roadScrollOffset: simRef.current.roadScroll,
+      roadPatternStripeCanvas: stripeCanvas,
+      obstacles: simRef.current.obstacles,
+      crashed: crashedRef.current,
     });
   }, []);
 
   const resizeAndPaint = useCallback(() => {
     resizeCanvas();
-    drawFrame();
-  }, [resizeCanvas, drawFrame]);
+    carrinhoStateRef.current = createInitialCarrinhoState();
+    crashedRef.current = false;
+    setHud({
+      lane: carrinhoStateRef.current.laneIndex,
+      crashed: false,
+    });
+    resetSimulationOnly();
+    paintOneFrame();
+  }, [resizeCanvas, resetSimulationOnly, paintOneFrame]);
 
   useEffect(() => {
     resizeAndPaint();
@@ -53,11 +141,92 @@ export function CarrinhoGame() {
   }, [resizeAndPaint]);
 
   useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+
+      const canvas = canvasRef.current;
+      const wrap = wrapRef.current;
+      if (canvas && wrap && simRef.current.ready) {
+        const layout = computeRoadLayout(canvas.width, canvas.height, LANE_COUNT);
+        const beltSpeedCanvasPerSec =
+          (ESTEIRA_SPEED_CSS_PX_PER_SEC / Math.max(1, wrap.clientHeight)) *
+          canvas.height;
+        const dy = beltSpeedCanvasPerSec * dt;
+
+        if (!crashedRef.current) {
+          simRef.current.roadScroll += dy;
+          advanceEsteiraObstacles(
+            simRef.current.obstacles,
+            dy,
+            layout,
+            LANE_COUNT,
+            wrap.clientHeight,
+            Math.random,
+          );
+          if (
+            playerHitsObstacle(
+              layout,
+              carrinhoStateRef.current.laneIndex,
+              simRef.current.obstacles,
+            )
+          ) {
+            crashedRef.current = true;
+            setHud((h) => ({ ...h, crashed: true }));
+          }
+        }
+
+        paintOneFrame();
+      }
+
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [paintOneFrame]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && crashedRef.current) {
+        e.preventDefault();
+        fullRestart();
+        return;
+      }
+      if (e.code === 'KeyR' && crashedRef.current) {
+        e.preventDefault();
+        fullRestart();
+        return;
+      }
+      if (crashedRef.current) return;
+
+      const d = steerDelta(e);
+      if (d === 0) return;
+
+      if (isSteerKey(e) && e.target === canvas) {
+        e.preventDefault();
+      }
+
+      const next = carrinhoStateRef.current.laneIndex + d;
+      if (next < 0 || next >= LANE_COUNT) return;
+
+      carrinhoStateRef.current = { laneIndex: next };
+      setHud((h) => ({ ...h, lane: next }));
+    };
+
+    canvas.addEventListener('keydown', onKey);
+    return () => canvas.removeEventListener('keydown', onKey);
+  }, [fullRestart]);
+
+  useEffect(() => {
     canvasRef.current?.focus({ preventScroll: true });
   }, []);
 
-  /** 1-based para o HUD; espelha `carrinhoStateRef.current.laneIndex` (atualizável futuramente por input). */
-  const laneDisplayHuman = carrinhoStateRef.current.laneIndex + 1;
+  const laneDisplayHuman = hud.lane + 1;
 
   return (
     <div className="carrinho-app">
@@ -69,6 +238,10 @@ export function CarrinhoGame() {
             <dd>
               {laneDisplayHuman}/{LANE_COUNT}
             </dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{hud.crashed ? 'Choque — Espaço ou R' : 'A andar'}</dd>
           </div>
         </dl>
       </header>
@@ -83,7 +256,8 @@ export function CarrinhoGame() {
           />
         </div>
         <p className="carrinho-help">
-          Vista em {LANE_COUNT} faixas · Controlos virão nos próximos passos · Foco na pista ao clicar
+          Setas ou A/D para mudar de faixa · A esteira e os obstáculos descem · Espaço ou R
+          recomeça após choque
         </p>
       </div>
     </div>
